@@ -1,0 +1,23 @@
+[package]
+name = "terra"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+duckdb = {version = "1.1.1", features = ["bundled"]}
+reqwest = {version = "0.12.9", features = ["blocking"]}
+futures-io = { version = "0.2.0-beta" }
+
+[[bin]]
+name = "data_ingestion"
+path = "src/data_ingestion.rs"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
+
+[profile.release]
+opt-level = "z"
+strip = true
+lto = true
