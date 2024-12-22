@@ -1,7 +1,8 @@
 [package]
-name = "terra"
+name = "rust-hive"
 version = "0.1.0"
 edition = "2021"
+default-run = "main"
 
 [dependencies]
 duckdb = {version = "1.1.1", features = ["bundled"]}
@@ -15,6 +16,10 @@ path = "src/data_ingestion.rs"
 [[bin]]
 name = "main"
 path = "src/main.rs"
+
+[[bin]]
+name = "experiment"
+path = "src/experiment.rs"
 
 
 [profile.release]
