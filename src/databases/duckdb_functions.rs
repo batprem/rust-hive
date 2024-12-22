@@ -1,13 +1,13 @@
 #![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
 use duckdb::{Connection, Result};
 use std::fs;
-use std::path::Path;
 use std::io::Error;
-
-
+use std::path::Path;
 
 pub fn create_duck_db_table(conn: &Connection) -> Result<()> {
-    conn.execute("CREATE OR REPLACE TABLE thai_population (
+    conn.execute(
+        "CREATE OR REPLACE TABLE thai_population (
             data_year INTEGER,
             yymm TEXT,
             cc_code INTEGER,
@@ -29,6 +29,7 @@ pub fn create_duck_db_table(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+// TODO: Change arguments into struct instead
 pub fn generate_insert_sql(
     data_year: i32,
     yymm: &str,
@@ -59,7 +60,7 @@ fn prepare_directory() -> Result<(), Error> {
     Ok(())
 }
 
-pub fn write_into_hive_partition(conn: &Connection) -> Result<(), > {
+pub fn write_into_hive_partition(conn: &Connection) -> Result<()> {
     let _ = prepare_directory();
     conn.execute(
         "
@@ -76,26 +77,25 @@ pub fn write_into_hive_partition(conn: &Connection) -> Result<(), > {
     Ok(())
 }
 
-pub fn query_population_all(conn: &Connection) -> Result<(), > {
+pub fn query_population_all(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT * FROM thai_population;")?;
+    let mut rows = stmt.query([])?;
 
-        let mut stmt = conn.prepare("SELECT * FROM thai_population;")?;
-        let mut rows = stmt.query([])?;
-    
-        while let Some(row) = rows.next()? {
-            let data_year: i32 = row.get(0)?; // Access columns by index
-            let yymm: String = row.get(1)?;
-            let cc_code: i32 = row.get(2)?;
-            let cc_desc: String = row.get(3)?;
-            let male: i32 = row.get(10)?;
-            let female: i32 = row.get(11)?;
-            let total: i32 = row.get(12)?;
-            let house: i32 = row.get(13)?;
-    
-            println!(
-                "Year: {}, YYMM: {}, Code: {}, Desc: {}, Male: {}, Female: {}, Total: {}, House: {}",
-                data_year, yymm, cc_code, cc_desc, male, female, total, house
-            );
-        }
-    
-        Ok(())
+    while let Some(row) = rows.next()? {
+        let data_year: i32 = row.get(0)?; // Access columns by index
+        let yymm: String = row.get(1)?;
+        let cc_code: i32 = row.get(2)?;
+        let cc_desc: String = row.get(3)?;
+        let male: i32 = row.get(10)?;
+        let female: i32 = row.get(11)?;
+        let total: i32 = row.get(12)?;
+        let house: i32 = row.get(13)?;
+
+        println!(
+            "Year: {}, YYMM: {}, Code: {}, Desc: {}, Male: {}, Female: {}, Total: {}, House: {}",
+            data_year, yymm, cc_code, cc_desc, male, female, total, house
+        );
+    }
+
+    Ok(())
 }

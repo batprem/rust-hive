@@ -18,7 +18,8 @@ pub mod population {
 
     impl PopulationRow {
         pub fn clean_text(text: &str) -> String {
-            text.trim_matches(|c|  ['\u{feff}', '|'].contains(&c)).to_string()
+            text.trim_matches(|c| ['\u{feff}', '|'].contains(&c))
+                .to_string()
         }
 
         pub fn extract_row(row: &str) -> Vec<&str> {
@@ -55,7 +56,6 @@ pub mod population {
         }
     }
 }
-
 
 fn main() {
     let row = "|2023|001|Description|RC01|Region Description|CCA01|CCAATT Desc|CCAMM01|CCAATTMM Desc|1234|5678|6912|345|";

@@ -1,15 +1,9 @@
 mod databases;
-use duckdb::{Connection, Result};
 use databases::duckdb_functions::{
-    create_duck_db_table,
-    generate_insert_sql,
-    write_into_hive_partition,
-    query_population_all
+    create_duck_db_table, generate_insert_sql, query_population_all, write_into_hive_partition,
 };
+use duckdb::{Connection, Result};
 use std::error::Error;
-
-
-
 
 /// Converts a Gregorian year to a Thai year.
 ///3
@@ -26,7 +20,6 @@ use std::error::Error;
 fn convert_to_thai_year(year: i32) -> i32 {
     year + 543 - 2500
 }
-
 
 fn get_data_stat_by_year(year: i32) -> Result<String, Box<dyn Error>> {
     let thai_year = convert_to_thai_year(year);
@@ -67,26 +60,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     while let Ok(data) = get_data_stat_by_year(year) {
         for line in data.split("\n") {
             // TODO: Make it to a function
-            let extracted = extract_row(
-                line.trim_matches(
-                    |c| ['|', ' ', '\n', '\r'].contains(&c)
-                )
-            );
-            if let [
-                yymm,
-                cc_code,
-                cc_desc,
-                rcode_code,
-                rcode_desc,
-                ccaatt_code,
-                ccaatt_desc,
-                ccaattmm_code,
-                ccaattmm_desc,
-                male_str,
-                female_str,
-                total_str,
-                house_str
-            ] = extracted[..] {
+            let extracted = extract_row(line.trim_matches(|c| ['|', ' ', '\n', '\r'].contains(&c)));
+            if let [yymm, cc_code, cc_desc, rcode_code, rcode_desc, ccaatt_code, ccaatt_desc, ccaattmm_code, ccaattmm_desc, male_str, female_str, total_str, house_str] =
+                extracted[..]
+            {
                 let male = string_to_int(male_str)?;
                 let female = string_to_int(female_str)?;
                 let total = string_to_int(total_str)?;
@@ -108,8 +85,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     house,
                 );
                 conn.execute(&insert_sql, [])?;
-            }
-            else {
+            } else {
                 println!("Row does not have the correct number of fields");
             }
         }
