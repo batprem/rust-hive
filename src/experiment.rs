@@ -55,18 +55,9 @@ mod population {
             value.replace(",", "").parse::<i32>()
         }
 
-        pub fn handle_input<I: InputHandler>(input: I) {
-            let elements = input.to_vec();
-
-            // Process the elements as needed
-            for element in elements {
-                println!("{}", element);
-            }
-        }
-
-        pub fn another_parse<I: InputHandler>(row: I) -> Result<Self, String> {
+        pub fn parse<I: InputHandler>(row: I) -> Result<Self, String> {
             let fields = row.to_vec();
-
+            println!("{:?}", fields);
             // Process the elements as needed
             if fields.len() != 13 {
                 return Err("Row does not have the correct number of fields".to_string());
@@ -92,9 +83,41 @@ mod population {
 }
 
 fn main() {
-    let row = "|2023|001|Description|RC01|Region Description|CCA01|CCAATT Desc|CCAMM01|CCAATTMM Desc|1234|5678|6912|345|";
+    // Cases: string
+    let row_str = "|2023|001|Description|RC01|Region Description|CCA01|CCAATT Desc|CCAMM01|CCAATTMM Desc|1234|5678|6912|345|";
 
-    match population::PopulationRow::another_parse(row.to_string()) {
+    match population::PopulationRow::parse(row_str.to_string()) {
+        Ok(population_row) => {
+            println!(
+                "Parsed row: YYMM = {}, CC Code = {}, Male = {}",
+                population_row.yymm, population_row.cc_code, population_row.male
+            );
+        }
+        Err(err) => {
+            println!("Error parsing row: {}", err);
+        }
+    }
+
+    // Cases: vector of strings
+    let row_vec = vec![
+        "2023",
+        "001",
+        "Description",
+        "RC01",
+        "Region Description",
+        "CCA01",
+        "CCAATT Desc",
+        "CCAMM01",
+        "CCAATTMM Desc",
+        "1234",
+        "5678",
+        "6912",
+        "345",
+    ]
+    .into_iter()
+    .map(|value| value.to_string())
+    .collect::<Vec<String>>();
+    match population::PopulationRow::parse(row_vec) {
         Ok(population_row) => {
             println!(
                 "Parsed row: YYMM = {}, CC Code = {}, Male = {}",
