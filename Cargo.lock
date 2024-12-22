@@ -1637,6 +1637,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-hive"
+version = "0.1.0"
+dependencies = [
+ "duckdb",
+ "futures-io 0.2.1",
+ "reqwest",
+]
+
+[[package]]
 name = "rust_decimal"
 version = "1.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1997,15 +2006,6 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "terra"
-version = "0.1.0"
-dependencies = [
- "duckdb",
- "futures-io 0.2.1",
- "reqwest",
 ]
 
 [[package]]
