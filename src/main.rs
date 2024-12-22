@@ -1,4 +1,5 @@
 mod databases;
+mod parsers;
 use duckdb::{Connection, Result};
 use databases::duckdb_functions::{
     create_duck_db_table,
