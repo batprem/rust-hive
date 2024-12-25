@@ -1,5 +1,4 @@
 mod databases;
-mod experiment;
 mod parsers;
 use databases::duckdb_functions::{
     create_duck_db_table, generate_insert_sql_given_row_struct, write_into_hive_partition,
@@ -45,9 +44,10 @@ fn get_data_stat_by_year(year: i32) -> Result<String, String> {
         "https://stat.bora.dopa.go.th/new_stat/file/{}/stat_c{}.txt",
         thai_year, thai_year
     );
+
     let mut result = String::new();
     if let Ok(response) = reqwest::blocking::get(url) {
-        if response.status().as_u16()/ 200 != 2 {
+        if response.status().as_u16() / 100 != 2 {
             return Err(format!(
                 "Fail request with HTTP code: {:?}",
                 response.status().as_u16()
