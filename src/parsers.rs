@@ -29,6 +29,7 @@ pub mod population {
         }
     }
 
+    #[derive(Debug)]
     pub struct PopulationRow {
         pub yymm: String,
         pub cc_code: i32,
@@ -52,7 +53,7 @@ pub mod population {
 
         pub fn parse<I: InputHandler>(row: I) -> Result<Self, String> {
             let fields = row.to_vec();
-            println!("{:?}", fields);
+
             // Process the elements as needed
             if fields.len() != 13 {
                 return Err("Row does not have the correct number of fields".to_string());
