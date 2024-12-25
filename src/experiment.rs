@@ -1,27 +1,6 @@
 #![allow(dead_code)]
 
-mod population {
-    pub struct PopulationRow {
-        pub yymm: String,
-        pub cc_code: String,
-        pub cc_desc: String,
-        pub rcode_code: String,
-        pub rcode_desc: String,
-        pub ccaatt_code: String,
-        pub ccaatt_desc: String,
-        pub ccaattmm_code: String,
-        pub ccaattmm_desc: String,
-        pub male: i32,
-        pub female: i32,
-        pub total: i32,
-        pub house: i32,
-    }
-
-    pub enum Row {
-        Str(String),
-        DelimitedString(Vec<String>),
-    }
-
+pub mod population {
     pub fn clean_text(text: &str) -> String {
         text.trim_matches(|c| ['\u{feff}', '|'].contains(&c))
             .to_string()
@@ -49,6 +28,22 @@ mod population {
                 .collect()
         }
     }
+    #[derive(Debug, PartialEq)]
+    pub struct PopulationRow {
+        pub yymm: String,
+        pub cc_code: String,
+        pub cc_desc: String,
+        pub rcode_code: String,
+        pub rcode_desc: String,
+        pub ccaatt_code: String,
+        pub ccaatt_desc: String,
+        pub ccaattmm_code: String,
+        pub ccaattmm_desc: String,
+        pub male: i32,
+        pub female: i32,
+        pub total: i32,
+        pub house: i32,
+    }
 
     impl PopulationRow {
         pub fn string_to_int(value: &str) -> Result<i32, std::num::ParseIntError> {
@@ -57,7 +52,6 @@ mod population {
 
         pub fn parse<I: InputHandler>(row: I) -> Result<Self, String> {
             let fields = row.to_vec();
-            println!("{:?}", fields);
             // Process the elements as needed
             if fields.len() != 13 {
                 return Err("Row does not have the correct number of fields".to_string());
