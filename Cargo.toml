@@ -8,6 +8,7 @@ default-run = "main"
 duckdb = {version = "1.1.1", features = ["bundled"]}
 reqwest = {version = "0.12.9", features = ["blocking"]}
 futures-io = { version = "0.2.0-beta" }
+thiserror = "2.0.9"
 
 [[bin]]
 name = "data_ingestion"
