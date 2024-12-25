@@ -1,125 +1,167 @@
-#![allow(dead_code)]
+mod databases;
+mod parsers;
 
-pub mod population {
-    pub fn clean_text(text: &str) -> String {
-        text.trim_matches(|c| ['\u{feff}', '|'].contains(&c))
-            .to_string()
-    }
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use databases::duckdb_functions::{
+    create_duck_db_table, generate_insert_sql_given_row_struct, write_into_hive_partition,
+};
+use duckdb::{Connection, Error as DuckDBError, Result};
 
-    pub fn extract_row(row: &str) -> Vec<&str> {
-        row.split('|').collect()
-    }
-    pub trait InputHandler {
-        fn to_vec(self) -> Vec<String>;
-    }
+use reqwest::Error as RequestwestError;
+use reqwest::Client;
+use rust_hive::parsers::population::PopulationRow;
+use thiserror::Error;
+use tokio::task::JoinError;
+use futures::future::join_all;
 
-    impl InputHandler for Vec<String> {
-        fn to_vec(self) -> Vec<String> {
-            self
-        }
-    }
 
-    impl InputHandler for String {
-        fn to_vec(self) -> Vec<String> {
-            let cleaned_input = clean_text(&self);
-            extract_row(&cleaned_input)
-                .into_iter()
-                .map(|text| text.to_string())
-                .collect()
-        }
-    }
-    #[derive(Debug, PartialEq)]
-    pub struct PopulationRow {
-        pub yymm: String,
-        pub cc_code: String,
-        pub cc_desc: String,
-        pub rcode_code: String,
-        pub rcode_desc: String,
-        pub ccaatt_code: String,
-        pub ccaatt_desc: String,
-        pub ccaattmm_code: String,
-        pub ccaattmm_desc: String,
-        pub male: i32,
-        pub female: i32,
-        pub total: i32,
-        pub house: i32,
-    }
-
-    impl PopulationRow {
-        pub fn string_to_int(value: &str) -> Result<i32, std::num::ParseIntError> {
-            value.replace(",", "").parse::<i32>()
-        }
-
-        pub fn parse<I: InputHandler>(row: I) -> Result<Self, String> {
-            let fields = row.to_vec();
-            // Process the elements as needed
-            if fields.len() != 13 {
-                return Err("Row does not have the correct number of fields".to_string());
-            }
-
-            Ok(PopulationRow {
-                yymm: fields[0].to_string(),
-                cc_code: fields[1].to_string(),
-                cc_desc: fields[2].to_string(),
-                rcode_code: fields[3].to_string(),
-                rcode_desc: fields[4].to_string(),
-                ccaatt_code: fields[5].to_string(),
-                ccaatt_desc: fields[6].to_string(),
-                ccaattmm_code: fields[7].to_string(),
-                ccaattmm_desc: fields[8].to_string(),
-                male: Self::string_to_int(&fields[9]).map_err(|e| e.to_string())?,
-                female: Self::string_to_int(&fields[10]).map_err(|e| e.to_string())?,
-                total: Self::string_to_int(&fields[11]).map_err(|e| e.to_string())?,
-                house: Self::string_to_int(&fields[12]).map_err(|e| e.to_string())?,
-            })
-        }
-    }
+// Custom error handling
+#[derive(Error, Debug)]
+enum IngestionError {
+    #[error("Error connecting to DuckDB: {0}")]
+    DuckDB(#[from] DuckDBError),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Requestwest error: {0}")]
+    Requestwest(#[from] RequestwestError),
+    #[error("Join error: {0}")]
+    Join(#[from] JoinError),
+    #[error("Parse error: {0}")]
+    Parse(String),
 }
 
-fn main() {
-    // Cases: string
-    let row_str = "|2023|001|Description|RC01|Region Description|CCA01|CCAATT Desc|CCAMM01|CCAATTMM Desc|1234|5678|6912|345|";
+/// Converts a Gregorian year to a Thai year.
+///3
+/// This function takes an integer representing a Gregorian year and returns the corresponding Thai year.
+/// The conversion is based on the Thai calendar system, which starts from the year 2500.
+///
+/// # Parameters
+///
+/// * `year` - An integer representing the Gregorian year.
+///
+/// # Returns
+///
+/// An integer representing the corresponding Thai year.
+fn convert_to_thai_year(year: i32) -> i32 {
+    year + 543 - 2500
+}
 
-    match population::PopulationRow::parse(row_str.to_string()) {
-        Ok(population_row) => {
-            println!(
-                "Parsed row: YYMM = {}, CC Code = {}, Male = {}",
-                population_row.yymm, population_row.cc_code, population_row.male
-            );
+// async fn get_data_stat_by_year(year: i32) -> Result<String, String> {
+//     let client = Client::new();
+//     let thai_year = convert_to_thai_year(year);
+//     let url = format!(
+//         "https://stat.bora.dopa.go.th/new_stat/file/{}/stat_c{}.txt",
+//         thai_year, thai_year
+//     );
+//     let mut result = String::new();
+//     if let Ok(response) = client.get(&url).send().await {
+//         if response.status().as_u16()/ 200 != 2 {
+//             return Err(format!(
+//                 "Fail request with HTTP code: {:?}",
+//                 response.status().as_u16()
+//             ));
+//         }
+//         result = response.text().await.ok().unwrap();
+//     }
+
+//     Ok(result.trim_matches(|c| c == ' ' || c == '\n').to_string())
+// }
+
+fn get_data_stat_by_year(year: i32) -> Result<String, String> {
+    let thai_year = convert_to_thai_year(year);
+    let url = format!(
+        "https://stat.bora.dopa.go.th/new_stat/file/{}/stat_c{}.txt",
+        thai_year, thai_year
+    );
+    println!("url: {}", url);
+    let mut result = String::new();
+    if let Ok(response) = reqwest::blocking::get(url) {
+        if response.status().as_u16()/ 200 != 2 {
+            return Err(format!(
+                "Fail request with HTTP code: {:?}",
+                response.status().as_u16()
+            ));
         }
-        Err(err) => {
-            println!("Error parsing row: {}", err);
-        }
+        result = response.text().ok().unwrap();
     }
 
-    // Cases: vector of strings
-    let row_vec = vec![
-        "2023",
-        "001",
-        "Description",
-        "RC01",
-        "Region Description",
-        "CCA01",
-        "CCAATT Desc",
-        "CCAMM01",
-        "CCAATTMM Desc",
-        "1234",
-        "5678",
-        "6912",
-        "345",
-    ]
-    .into_iter()
-    .map(|value| value.to_string())
-    .collect::<Vec<String>>();
-    match population::PopulationRow::parse(row_vec) {
-        Ok(population_row) => {
-            println!(
-                "Parsed row: YYMM = {}, CC Code = {}, Male = {}",
-                population_row.yymm, population_row.cc_code, population_row.male
-            );
-        }
-        Err(err) => {
-            println!("Error parsing row: {}", err);
-        }
+    Ok(result.trim_matches(|c| c == ' ' || c == '\n').to_string())
+}
+
+
+fn extract_row(row: &str) -> Vec<String> {
+    row.split('|')
+        .into_iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<String>>()
+}
+
+/// Updates a row in the database with population data.
+///
+/// This function processes a line of population data, parses it into a `PopulationRow` struct,
+/// generates an SQL insert statement, and executes it against the provided database connection.
+/// Note: Duckdb has internal mechanism which supports ACID
+///
+/// # Parameters
+///
+/// * `conn` - A reference to a DuckDB `Connection` object for database operations.
+/// * `line` - A string slice containing the raw population data to be processed.
+/// * `year` - An integer representing the year of the population data.
+///
+/// # Returns
+///
+/// A `Result` which is:
+/// * `Ok` with a `String` "Updated population" if the operation was successful.
+/// * `Err` with a boxed dynamic `Error` if any step in the process fails.
+async fn update_row(conn:  Arc<Mutex<&Connection>>, line: &str, year: i32) -> Result<String, IngestionError> {
+    // Extract fields from the line and convert them into a PopulationRow struct
+    let extracted = extract_row(line.trim_matches(|c| ['|', ' ', '\n', '\r'].contains(&c)));
+    let population_row = match PopulationRow::parse(extracted) {
+        Ok(row) => row,
+        Err(e) => return Err(IngestionError::Parse(e)),
+    };
+
+    // Generate an SQL insert statement
+    let insert_sql = generate_insert_sql_given_row_struct(year, &population_row);
+
+    // Execute the SQL asynchronously
+    let conn = conn.lock().await;
+    conn.execute(&insert_sql, []).map_err(|e| IngestionError::DuckDB(e))?;
+
+
+    // Return success message
+    Ok("Updated population".to_string())
+}
+
+
+#[tokio::main]
+async fn main() -> Result<(), IngestionError> {
+    println!("Run ingestion");
+    // Create a Duckdb table
+    let conn = Connection::open_in_memory()?;
+    create_duck_db_table(&conn)?;
+
+    // Initial year
+    let mut year = 1993;
+    // Ingest data and update the database in batches of 1000 rows per transactions
+    conn.execute("BEGIN TRANSACTION", [])?;
+    while let Ok(data) = get_data_stat_by_year(year) {
+
+        let futures = data
+            .split("\n")
+            .into_iter()
+            .map(|line| {
+                let conn = Arc::new(Mutex::new(&conn));  // Make connection Arc for use in async block
+                async move {
+                    update_row(conn, line, year).await
+                }
+            }).collect::<Vec<_>>();
+        print!("Year: {}", year);
+
+        year += 1;
     }
+    conn.execute("COMMIT", [])?;
+    write_into_hive_partition(&conn)?;
+    Ok(())
 }
