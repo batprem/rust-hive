@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 #![allow(clippy::too_many_arguments)]
+
 use duckdb::{Connection, Result};
+use rust_hive::parsers::population::PopulationRow;
 use std::fs;
 use std::io::Error;
 use std::path::Path;
@@ -49,6 +51,25 @@ pub fn generate_insert_sql(
     format!(
         "INSERT INTO thai_population VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}')",
         data_year, yymm, cc_code, cc_desc, rcode_code, rcode_desc, ccaatt_code, ccaatt_desc, ccaattmm_code, ccaattmm_desc, male, female, total, house
+    )
+}
+
+pub fn generate_insert_sql_given_row_struct(data_year: i32, row: &PopulationRow) -> String {
+    generate_insert_sql(
+        data_year,
+        &row.yymm,
+        row.cc_code,
+        &row.cc_desc,
+        &row.rcode_code,
+        &row.rcode_desc,
+        &row.ccaatt_code,
+        &row.ccaatt_desc,
+        &row.ccaattmm_code,
+        &row.ccaattmm_desc,
+        row.male,
+        row.female,
+        row.total,
+        row.house,
     )
 }
 
