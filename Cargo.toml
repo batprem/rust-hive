@@ -39,3 +39,6 @@ path = "src/experiment.rs"
 opt-level = "z"
 strip = true
 lto = true
+
+[dev-dependencies]
+mockito = "0.31.0"
