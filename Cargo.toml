@@ -9,6 +9,10 @@ duckdb = {version = "1.1.1", features = ["bundled"]}
 reqwest = {version = "0.12.9", features = ["blocking"]}
 futures-io = { version = "0.2.0-beta" }
 thiserror = "2.0.9"
+tokio = { version = "1.42.0", features = ["rt", "rt-multi-thread", "macros"] }
+futures = "0.3.31"
+tokio-stream = "0.1.17"
+rayon = "1.10.0"
 
 [[bin]]
 name = "data_ingestion"
@@ -17,6 +21,14 @@ path = "src/data_ingestion.rs"
 [[bin]]
 name = "main"
 path = "src/main.rs"
+
+[[bin]]
+name = "main-multithread"
+path = "src/main_multithread.rs"
+
+[[bin]]
+name = "main-tokio"
+path = "src/main_tokio.rs"
 
 [[bin]]
 name = "experiment"
