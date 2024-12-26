@@ -94,7 +94,6 @@ fn extract_row(row: &str) -> Vec<String> {
 /// * `Ok` with a `String` "Updated population" if the operation was successful.
 /// * `Err` with a boxed dynamic `Error` if any step in the process fails.
 async fn a_update_row(conn:  Arc<Mutex<&Connection>>, line: &str, year: i32) -> Result<String, IngestionError> {
-    println!("{}", line);
     // Extract fields from the line and convert them into a PopulationRow struct
     let extracted = extract_row(line.trim_matches(|c| ['|', ' ', '\n', '\r'].contains(&c)));
     let population_row = match PopulationRow::parse(extracted) {
@@ -114,9 +113,9 @@ async fn a_update_row(conn:  Arc<Mutex<&Connection>>, line: &str, year: i32) -> 
     Ok("Updated population".to_string())
 }
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() -> Result<(), IngestionError> {
-    println!("Run ingestion");
+    println!("Run ingestion - Tokio");
     // Create a Duckdb table
     let conn = Connection::open_in_memory()?;
     create_duck_db_table(&conn)?;

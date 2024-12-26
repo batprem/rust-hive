@@ -1,19 +1,15 @@
 mod databases;
 mod parsers;
-
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use databases::duckdb_functions::{
     create_duck_db_table, generate_insert_sql_given_row_struct, write_into_hive_partition,
 };
 use duckdb::{Connection, Error as DuckDBError, Result};
 
 use reqwest::Error as RequestwestError;
-use reqwest::Client;
 use rust_hive::parsers::population::PopulationRow;
 use thiserror::Error;
-use tokio::task::JoinError;
-use futures::future::join_all;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 
 // Custom error handling
@@ -25,8 +21,6 @@ enum IngestionError {
     Io(#[from] std::io::Error),
     #[error("Requestwest error: {0}")]
     Requestwest(#[from] RequestwestError),
-    #[error("Join error: {0}")]
-    Join(#[from] JoinError),
     #[error("Parse error: {0}")]
     Parse(String),
 }
@@ -47,27 +41,26 @@ fn convert_to_thai_year(year: i32) -> i32 {
     year + 543 - 2500
 }
 
-async fn get_data_stat_by_year(year: i32) -> Result<String, String> {
-    let client = Client::new();
+fn get_data_stat_by_year(year: i32) -> Result<String, String> {
     let thai_year = convert_to_thai_year(year);
     let url = format!(
         "https://stat.bora.dopa.go.th/new_stat/file/{}/stat_c{}.txt",
         thai_year, thai_year
     );
+
     let mut result = String::new();
-    if let Ok(response) = client.get(&url).send().await {
-        if response.status().as_u16()/ 100 != 2 {
+    if let Ok(response) = reqwest::blocking::get(url) {
+        if response.status().as_u16() / 100 != 2 {
             return Err(format!(
                 "Fail request with HTTP code: {:?}",
                 response.status().as_u16()
             ));
         }
-        result = response.text().await.ok().unwrap();
+        result = response.text().ok().unwrap();
     }
 
     Ok(result.trim_matches(|c| c == ' ' || c == '\n').to_string())
 }
-
 
 fn extract_row(row: &str) -> Vec<String> {
     row.split('|')
@@ -93,8 +86,7 @@ fn extract_row(row: &str) -> Vec<String> {
 /// A `Result` which is:
 /// * `Ok` with a `String` "Updated population" if the operation was successful.
 /// * `Err` with a boxed dynamic `Error` if any step in the process fails.
-async fn a_update_row(conn:  Arc<Mutex<&Connection>>, line: &str, year: i32) -> Result<String, IngestionError> {
-    println!("{}", line);
+fn update_row(conn: &Connection, line: &str, year: i32) -> Result<String, IngestionError> {
     // Extract fields from the line and convert them into a PopulationRow struct
     let extracted = extract_row(line.trim_matches(|c| ['|', ' ', '\n', '\r'].contains(&c)));
     let population_row = match PopulationRow::parse(extracted) {
@@ -102,44 +94,55 @@ async fn a_update_row(conn:  Arc<Mutex<&Connection>>, line: &str, year: i32) -> 
         Err(e) => return Err(IngestionError::Parse(e)),
     };
 
-    // Generate an SQL insert statement
+    // Generate an SQL insert statement and execute it against the database connection
     let insert_sql = generate_insert_sql_given_row_struct(year, &population_row);
-
-    // Execute the SQL asynchronously
-    let conn = conn.lock().await;
-    conn.execute(&insert_sql, []).map_err(|e| IngestionError::DuckDB(e))?;
-
+    conn.execute(&insert_sql, [])?;
 
     // Return success message
     Ok("Updated population".to_string())
 }
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
-async fn main() -> Result<(), IngestionError> {
-    println!("Run ingestion");
+fn main() -> Result<(), IngestionError> {
+    println!("Run ingestion - Multithreading");
     // Create a Duckdb table
     let conn = Connection::open_in_memory()?;
     create_duck_db_table(&conn)?;
+    let conn = Arc::new(Mutex::new(conn));
 
     // Initial year
-    let mut year = 1993;
-    // Ingest data and update the database in batches of 1000 rows per transactions
-    // conn.execute("BEGIN TRANSACTION", [])?;
-    while let Ok(data) = get_data_stat_by_year(year).await {
-        let futures = data
-            .split("\n")
-            .into_iter()
-            .map(|line| {
-                let conn = Arc::new(Mutex::new(&conn));  // Make connection Arc for use in async block
-                async move {
-                    a_update_row(conn, line, year).await
-                }
-            }).collect::<Vec<_>>();
+    let start_year = 1993;
+    let end_year = 2023;
 
-        let _results = join_all(futures).await;
-        year += 1;
+    let mut handles = vec![];
+    for year in start_year..=end_year {
+        let conn_clone = Arc::clone(&conn);
+        let handle = thread::spawn(move || {
+            if let Ok(data) = get_data_stat_by_year(year) {
+                let data_lines: Vec<_> = data.split('\n').collect();
+                let mut thread_handles = vec![];
+
+                for line in data_lines {
+                    let conn_inner = Arc::clone(&conn_clone);
+                    let line = line.to_string();
+                    let handle = thread::spawn(move || {
+                        let conn = conn_inner.lock().unwrap();
+                        update_row(&conn, &line, year).ok();
+                    });
+                    thread_handles.push(handle);
+                }
+
+                for handle in thread_handles {
+                    handle.join().unwrap();
+                }
+            }
+        });
+        handles.push(handle);
     }
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    let conn = Arc::try_unwrap(conn).expect("Failed to unwrap Arc").into_inner().unwrap();
     write_into_hive_partition(&conn)?;
-    
     Ok(())
 }
