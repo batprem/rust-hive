@@ -8,6 +8,9 @@ use duckdb::{Connection, Error as DuckDBError, Result};
 use reqwest::Error as RequestwestError;
 use rust_hive::parsers::population::PopulationRow;
 use thiserror::Error;
+use std::sync::{Arc, Mutex};
+use std::thread;
+
 
 // Custom error handling
 #[derive(Error, Debug)]
@@ -100,24 +103,46 @@ fn update_row(conn: &Connection, line: &str, year: i32) -> Result<String, Ingest
 }
 
 fn main() -> Result<(), IngestionError> {
-    println!("Run ingestion");
+    println!("Run ingestion - Multithreading");
     // Create a Duckdb table
     let conn = Connection::open_in_memory()?;
     create_duck_db_table(&conn)?;
+    let conn = Arc::new(Mutex::new(conn));
 
     // Initial year
-    let mut year = 1993;
-    // Ingest data and update the database in batches of 1000 rows per transactions
-    conn.execute("BEGIN TRANSACTION", [])?;
-    while let Ok(data) = get_data_stat_by_year(year) {
-        let _: Vec<_> = data
-            .split("\n")
-            .into_iter()
-            .map(|line| update_row(&conn, line, year))
-            .collect();
-        year += 1;
+    let start_year = 1993;
+    let end_year = 2023;
+
+    let mut handles = vec![];
+    for year in start_year..=end_year {
+        let conn_clone = Arc::clone(&conn);
+        let handle = thread::spawn(move || {
+            if let Ok(data) = get_data_stat_by_year(year) {
+                let data_lines: Vec<_> = data.split('\n').collect();
+                let mut thread_handles = vec![];
+
+                for line in data_lines {
+                    let conn_inner = Arc::clone(&conn_clone);
+                    let line = line.to_string();
+                    let handle = thread::spawn(move || {
+                        let conn = conn_inner.lock().unwrap();
+                        update_row(&conn, &line, year).ok();
+                    });
+                    thread_handles.push(handle);
+                }
+
+                for handle in thread_handles {
+                    handle.join().unwrap();
+                }
+            }
+        });
+        handles.push(handle);
     }
-    conn.execute("COMMIT", [])?;
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    let conn = Arc::try_unwrap(conn).expect("Failed to unwrap Arc").into_inner().unwrap();
     write_into_hive_partition(&conn)?;
     Ok(())
 }
