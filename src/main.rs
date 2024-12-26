@@ -9,7 +9,7 @@ use reqwest::Error as RequestwestError;
 use rust_hive::parsers::population::PopulationRow;
 use thiserror::Error;
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::thread::{self, JoinHandle};
 
 
 // Custom error handling
@@ -26,7 +26,7 @@ enum IngestionError {
 }
 
 /// Converts a Gregorian year to a Thai year.
-///3
+///
 /// This function takes an integer representing a Gregorian year and returns the corresponding Thai year.
 /// The conversion is based on the Thai calendar system, which starts from the year 2500.
 ///
@@ -36,11 +36,26 @@ enum IngestionError {
 ///
 /// # Returns
 ///
-/// An integer representing the corresponding Thai year.
+/// An integer representing the corresponding Thai year in short form.
 fn convert_to_thai_year(year: i32) -> i32 {
     year + 543 - 2500
 }
 
+/// Retrieves statistical data for a given year from a specific URL.
+///
+/// This function converts the input Gregorian year to a Thai year, constructs a URL,
+/// and attempts to fetch data from that URL. It handles the HTTP response and returns
+/// the retrieved data as a string.
+///
+/// # Parameters
+///
+/// * `year`: An `i32` representing the Gregorian year for which to fetch data.
+///
+/// # Returns
+///
+/// A `Result` which is:
+/// * `Ok` containing a `String` of the retrieved data, trimmed of leading/trailing whitespace and newlines.
+/// * `Err` containing a `String` describing the error if the HTTP request fails or returns a non-2xx status code.
 fn get_data_stat_by_year(year: i32) -> Result<String, String> {
     let thai_year = convert_to_thai_year(year);
     let url = format!(
@@ -62,6 +77,18 @@ fn get_data_stat_by_year(year: i32) -> Result<String, String> {
     Ok(result.trim_matches(|c| c == ' ' || c == '\n').to_string())
 }
 
+/// Extracts fields from a given row of data using the '|' delimiter.
+///
+/// This function splits the input row string by the '|' character and returns a vector of strings,
+/// where each string represents a field extracted from the input row.
+///
+/// # Parameters
+///
+/// * `row` - A string slice representing the input row of data.
+///
+/// # Returns
+///
+/// A vector of strings, where each string is a field extracted from the input row.
 fn extract_row(row: &str) -> Vec<String> {
     row.split('|')
         .into_iter()
@@ -102,6 +129,30 @@ fn update_row(conn: &Connection, line: &str, year: i32) -> Result<String, Ingest
     Ok("Updated population".to_string())
 }
 
+fn update_population(conn: &Arc<Mutex<Connection>>, year: i32) -> JoinHandle<()> {
+    let conn_clone = Arc::clone(&conn);
+    let handle = thread::spawn(move || {
+        if let Ok(data) = get_data_stat_by_year(year) {
+            let data_lines: Vec<_> = data.split('\n').collect();
+            let mut thread_handles = vec![];
+
+            for line in data_lines {
+                let conn_inner = Arc::clone(&conn_clone);
+                let line = line.to_string();
+                let handle = thread::spawn(move || {
+                    let conn = conn_inner.lock().unwrap();
+                    update_row(&conn, &line, year).ok();
+                });
+                thread_handles.push(handle);
+            }
+
+            for handle in thread_handles {
+                handle.join().unwrap();
+            }
+        }
+    });
+    handle
+}
 fn main() -> Result<(), IngestionError> {
     println!("Run ingestion - Multithreading");
     // Create a Duckdb table
@@ -116,26 +167,7 @@ fn main() -> Result<(), IngestionError> {
     let mut handles = vec![];
     for year in start_year..=end_year {
         let conn_clone = Arc::clone(&conn);
-        let handle = thread::spawn(move || {
-            if let Ok(data) = get_data_stat_by_year(year) {
-                let data_lines: Vec<_> = data.split('\n').collect();
-                let mut thread_handles = vec![];
-
-                for line in data_lines {
-                    let conn_inner = Arc::clone(&conn_clone);
-                    let line = line.to_string();
-                    let handle = thread::spawn(move || {
-                        let conn = conn_inner.lock().unwrap();
-                        update_row(&conn, &line, year).ok();
-                    });
-                    thread_handles.push(handle);
-                }
-
-                for handle in thread_handles {
-                    handle.join().unwrap();
-                }
-            }
-        });
+        let handle = update_population(&conn_clone, year);
         handles.push(handle);
     }
     for handle in handles {
@@ -145,4 +177,63 @@ fn main() -> Result<(), IngestionError> {
     let conn = Arc::try_unwrap(conn).expect("Failed to unwrap Arc").into_inner().unwrap();
     write_into_hive_partition(&conn)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use duckdb::Connection;
+    
+    #[test]
+    fn test_convert_to_thai_year() {
+        assert_eq!(convert_to_thai_year(2000), 43);
+        assert_eq!(convert_to_thai_year(2023), 66);
+        assert_eq!(convert_to_thai_year(1993), 36);
+    }
+
+    #[test]
+    fn test_extract_row() {
+        let row = "value1|value2|value3";
+        let extracted = extract_row(row);
+        assert_eq!(extracted, vec!["value1", "value2", "value3"]);
+    }
+
+    #[test]
+    fn test_update_row_success() {
+        let conn = Connection::open_in_memory().expect("Failed to create connection");
+        // Assuming `create_duck_db_table` creates the required table structure
+        create_duck_db_table(&conn).expect("Failed to create table");
+        let year = 2023;
+        let line = "|2024|001|Description|RC01|Region Description|CCA01|CCAATT Desc|CCAMM01|CCAATTMM Desc|1234|5678|6912|345|";
+
+        // Mock PopulationRow parse and SQL generator for the test
+        let row_vec = vec![
+            "2023",
+            "002",
+            "Description",
+            "RC01",
+            "Region Description",
+            "CCA01",
+            "CCAATT Desc",
+            "CCAMM01",
+            "CCAATTMM Desc",
+            "1234",
+            "5678",
+            "6912",
+            "345",
+        ]
+        .into_iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<String>>();
+        let parse_result = PopulationRow::parse(row_vec);
+        assert!(parse_result.is_ok());
+
+        let sql = generate_insert_sql_given_row_struct(year, &parse_result.unwrap());
+        assert!(conn.execute(&sql, []).is_ok());
+
+        let result = update_row(&conn, line, year);
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Updated population");
+    }
 }
