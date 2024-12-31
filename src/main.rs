@@ -7,10 +7,9 @@ use duckdb::{Connection, Error as DuckDBError, Result};
 
 use reqwest::Error as RequestwestError;
 use rust_hive::parsers::population::PopulationRow;
-use thiserror::Error;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-
+use thiserror::Error;
 
 // Custom error handling
 #[derive(Error, Debug)]
@@ -153,6 +152,20 @@ fn update_population(conn: &Arc<Mutex<Connection>>, year: i32) -> JoinHandle<()>
     });
     handle
 }
+/// Executes the main ingestion process using multithreading.
+///
+/// This function performs the following steps:
+/// 1. Creates an in-memory DuckDB table.
+/// 2. Initiates population data updates for years 1993 to 2023 using multiple threads.
+/// 3. Waits for all update threads to complete.
+/// 4. Writes the collected data into Hive partitions.
+///
+/// # Returns
+///
+/// A `Result` which is:
+/// * `Ok(())` if the ingestion process completes successfully.
+/// * `Err(IngestionError)` if any step in the process fails, where `IngestionError`
+///   is a custom error type that encapsulates various potential error scenarios.
 fn main() -> Result<(), IngestionError> {
     println!("Run ingestion - Multithreading");
     // Create a Duckdb table
@@ -174,7 +187,10 @@ fn main() -> Result<(), IngestionError> {
         handle.join().unwrap();
     }
 
-    let conn = Arc::try_unwrap(conn).expect("Failed to unwrap Arc").into_inner().unwrap();
+    let conn = Arc::try_unwrap(conn)
+        .expect("Failed to unwrap Arc")
+        .into_inner()
+        .unwrap();
     write_into_hive_partition(&conn)?;
     Ok(())
 }
@@ -183,7 +199,7 @@ fn main() -> Result<(), IngestionError> {
 mod tests {
     use super::*;
     use duckdb::Connection;
-    
+
     #[test]
     fn test_convert_to_thai_year() {
         assert_eq!(convert_to_thai_year(2000), 43);
