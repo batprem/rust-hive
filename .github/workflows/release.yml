@@ -31,10 +31,12 @@ jobs:
         with:
           RUSTTARGET: ${{ matrix.target }}
           ARCHIVE_TYPES: ${{ matrix.archive }}
+      - name: Remove unused files
+        run: |
+          rm target/${{ matrix.target }}/release/*.d; rm target/${{ matrix.target }}/release/*.rlib
+        continue-on-error: true
       - name: Compress binaries
         run: |
-          rm target/release/*.d
-          rm target/release/*.rlib
           zip -J rust-binary-${{ matrix.target }}.zip target/${{ matrix.target }}/release/*
   
       - name: Upload Binary Artifact
