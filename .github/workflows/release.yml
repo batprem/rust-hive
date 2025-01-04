@@ -1,29 +1,74 @@
-name: Rust Release binary
+name: Build and Release Rust Binaries
+
 on:
-  workflow_run:
-    workflows: ["Rust"]
-    types:
-      - completed
+  push:
+    tags:
+      - 'v*' # Trigger only on version tags, e.g., v1.0.0
+
+env:
+  RUSTFLAGS: "-C target-cpu=native"
+
 jobs:
-  release:
-    name: release ${{ matrix.target }}
+  build:
     runs-on: ubuntu-latest
+
     strategy:
-      fail-fast: false
       matrix:
-        include:
-          - target: x86_64-pc-windows-gnu
-            archive: zip
-          - target: x86_64-unknown-linux-musl
-            archive: tar.gz tar.xz tar.zst
-          # - target: x86_64-apple-darwin
-          #   archive: zip
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-pc-windows-gnu
+
     steps:
-      - uses: actions/checkout@main
-      - name: Compile and release
-        uses: rust-build/rust-build.action@v1.4.5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
         with:
-          RUSTTARGET: ${{ matrix.target }}
-          ARCHIVE_TYPES: ${{ matrix.archive }}
+          toolchain: stable
+          target: ${{ matrix.target }}
+          profile: minimal
+
+      - name: Install dependencies for Windows build
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+
+      - name: Build in release mode
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Compress binaries
+        run: |
+          zip -j rust-binary-${{ matrix.target }}.zip target/${{ matrix.target }}/release/*
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: rust-binary-${{ matrix.target }}
+          path: rust-binary-${{ matrix.target }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: |
+            artifacts/rust-binary-x86_64-unknown-linux-gnu.zip
+            artifacts/rust-binary-x86_64-pc-windows-gnu.zip
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            This release contains pre-built binaries for the following platforms:
+            - Linux (x86_64-unknown-linux-gnu)
+            - Windows (x86_64-pc-windows-gnu)
