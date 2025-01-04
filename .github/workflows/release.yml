@@ -10,36 +10,55 @@ env:
 
 jobs:
   build:
-
+    name: release ${{ matrix.target }}
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-gnu
+            archive: zip
+          - target: x86_64-unknown-linux-musl
+            archive: tar.gz tar.xz tar.zst
+          # - target: x86_64-apple-darwin
+          #   archive: zip
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+      - uses: actions/checkout@main
+      - name: Compile and release
+        uses: rust-build/rust-build.action@v1.4.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          RUSTTARGET: ${{ matrix.target }}
+          ARCHIVE_TYPES: ${{ matrix.archive }}
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.target }}-binary
+          path: target/${{ matrix.target }}/release/main
 
   release:
+    name: Create Release
     needs: build
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-pc-windows-msvc
     runs-on: ubuntu-latest
-
     steps:
-      - name: Download artifacts
+      - name: Download Artifacts
         uses: actions/download-artifact@v3
         with:
-          path: artifacts
+          name: ${{ matrix.target }}-binary
+          path: binaries/${{ matrix.target }}
 
       - name: Create GitHub Release
-        uses: ncipollo/release-action@v1
+        uses: softprops/action-gh-release@v1
         with:
-          artifacts: |
-            artifacts/rust-binary-x86_64-unknown-linux-gnu.zip
-            artifacts/rust-binary-x86_64-pc-windows-gnu.zip
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          body: |
-            This release contains pre-built binaries for the following platforms:
-            - Linux (x86_64-unknown-linux-gnu)
-            - Windows (x86_64-pc-windows-gnu)
+          files: |
+            binaries/x86_64-unknown-linux-gnu/<your-binary-name>
+            binaries/x86_64-pc-windows-msvc/<your-binary-name>.exe
+            binaries/x86_64-apple-darwin/<your-binary-name>
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
