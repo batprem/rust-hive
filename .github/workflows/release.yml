@@ -53,13 +53,14 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v3
         with:
-          name: ${{ matrix.target }}-binary
-          path: binaries/${{ matrix.target }}
-
+          name: rust-binary-${{ matrix.target }}
+          path: binaries/${{ matrix.target }}.zip
+      - name: list-artifacts
+        run: ls binaries
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            rust-binary-${{ matrix.target }}.zip
+             binaries/rust-binary-${{ matrix.target }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
