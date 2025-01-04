@@ -55,7 +55,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: rust-binary-${{ matrix.target }}
-          path: rust-binary-${{ matrix.target }}.zip
+          # path: rust-binary-${{ matrix.target }}.zip # Should exist
       - name: list-artifacts
         run: ls
       - name: Create GitHub Release
