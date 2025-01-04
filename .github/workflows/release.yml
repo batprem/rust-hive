@@ -31,9 +31,9 @@ jobs:
         with:
           RUSTTARGET: ${{ matrix.target }}
           ARCHIVE_TYPES: ${{ matrix.archive }}
-      - name: Remove unused files
+      - name: List files
         run: |
-          rm target/${{ matrix.target }}/release/*.d; rm target/${{ matrix.target }}/release/*.rlib
+          ls target/${{ matrix.target }}/release/
         continue-on-error: true
       - name: Compress binaries
         run: |
