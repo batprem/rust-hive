@@ -128,6 +128,21 @@ fn update_row(conn: &Connection, line: &str, year: i32) -> Result<String, Ingest
     Ok("Updated population".to_string())
 }
 
+/// Spawns a new thread to update population data for a given year.
+///
+/// This function creates a new thread that fetches population data for the specified year,
+/// processes the data, and updates the corresponding database table. It uses multithreading
+/// to improve performance by processing multiple years concurrently.
+///
+/// # Parameters
+///
+/// * `conn`: A reference to an `Arc<Mutex<Connection>>` containing the database connection.
+/// * `year`: An `i32` representing the year for which to update population data.
+///
+/// # Returns
+///
+/// A `JoinHandle<()>` representing the handle to the spawned thread. The thread will update
+/// the population data for the specified year and exit once completed.
 fn update_population(conn: &Arc<Mutex<Connection>>, year: i32) -> JoinHandle<()> {
     let conn_clone = Arc::clone(&conn);
     let handle = thread::spawn(move || {
@@ -175,7 +190,7 @@ fn main() -> Result<(), IngestionError> {
 
     // Initial year
     let start_year = 1993;
-    let end_year = 2023;
+    let end_year = 2025;
 
     let mut handles = vec![];
     for year in start_year..=end_year {
