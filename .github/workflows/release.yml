@@ -31,12 +31,18 @@ jobs:
         with:
           RUSTTARGET: ${{ matrix.target }}
           ARCHIVE_TYPES: ${{ matrix.archive }}
+      - name: Compress binaries
+        run: |
+          zip -j rust-binary-${{ matrix.target }}.zip target/${{ matrix.target }}/release/*
+      - name: Compress binaries
+        run: |
+          ls target/
+  
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.target }}-binary
-          path: target/${{ matrix.target }}/release/main
-
+          name: rust-binary-${{ matrix.target }}
+          path: rust-binary-${{ matrix.target }}.zip
   release:
     name: Create Release
     needs: build
