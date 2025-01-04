@@ -34,9 +34,6 @@ jobs:
       - name: Compress binaries
         run: |
           zip -j rust-binary-${{ matrix.target }}.zip target/${{ matrix.target }}/release/*
-      - name: Compress binaries
-        run: |
-          ls target/
   
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v3
@@ -63,8 +60,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            binaries/x86_64-unknown-linux-gnu/<your-binary-name>
-            binaries/x86_64-pc-windows-msvc/<your-binary-name>.exe
-            binaries/x86_64-apple-darwin/<your-binary-name>
+            rust-binary-${{ matrix.target }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
