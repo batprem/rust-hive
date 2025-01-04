@@ -59,7 +59,7 @@ jobs:
       - name: list-artifacts
         run: ls
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: 'softprops/action-gh-release@v2.2.0'
         with:
           files: |
               rust-binary-${{ matrix.target }}.zip
