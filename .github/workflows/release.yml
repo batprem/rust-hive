@@ -33,7 +33,9 @@ jobs:
           ARCHIVE_TYPES: ${{ matrix.archive }}
       - name: Compress binaries
         run: |
-          zip -j rust-binary-${{ matrix.target }}.zip target/${{ matrix.target }}/release/*
+          rm target/release/*.d
+          rm target/release/*.rlib
+          zip -J rust-binary-${{ matrix.target }}.zip target/${{ matrix.target }}/release/*
   
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v3
