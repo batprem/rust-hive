@@ -33,11 +33,12 @@ jobs:
           ARCHIVE_TYPES: ${{ matrix.archive }}
       - name: List files
         run: |
-          ls target/${{ matrix.target }}/release/
+          ls
+          ls /github/workspace/output
         continue-on-error: true
       - name: Compress binaries
         run: |
-          zip rust-binary-${{ matrix.target }}.zip target/${{ matrix.target }}/release/*
+          zip rust-binary-${{ matrix.target }}.zip /github/workspace/output/*
   
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v3
