@@ -9,7 +9,22 @@ env:
   RUSTFLAGS: "-C target-cpu=native"
 
 jobs:
-
+  mock-up-artiface:
+    name: Create Mock Up Artifacts
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-pc-windows-gnu
+          - x86_64-unknown-linux-musl
+    steps:
+      - name: Create a mock up file
+        run: echo "This is a mock up file with target ${{ matrix.target }}" > mock-${{ matrix.target }}.txt
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: mock-${{ matrix.target }}
+          path: mock-${{ matrix.target }}.txt
   release:
     name: Create Release
     permissions: write-all
@@ -21,8 +36,11 @@ jobs:
           - x86_64-unknown-linux-musl
     runs-on: ubuntu-latest
     steps:
-      - name: Create a mock up file
-        run: echo "This is a mock up file with target ${{ matrix.target }}" > mock-${{ matrix.target }}.txt
+      - name: Download Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: mock-${{ matrix.target }}
+          path: mock-${{ matrix.target }}.txt
       - name: list-artifacts
         run: ls
       - name: Create GitHub Release
