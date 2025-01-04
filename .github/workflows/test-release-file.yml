@@ -1,0 +1,34 @@
+name: Test-releaseing-files
+
+on:
+  push:
+    tags:
+      - 'test-v*' # Trigger only on version tags, e.g., v1.0.0
+
+env:
+  RUSTFLAGS: "-C target-cpu=native"
+
+jobs:
+
+  release:
+    name: Create Release
+    permissions: write-all
+
+    strategy:
+      matrix:
+        target:
+          - x86_64-pc-windows-gnu
+          - x86_64-unknown-linux-musl
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create a mock up file
+        run: echo "This is a mock up file with target ${{ matrix.target }}" > mock-${{ matrix.target }}.txt
+      - name: list-artifacts
+        run: ls
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+              mock-${{ matrix.target }}.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
