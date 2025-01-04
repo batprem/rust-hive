@@ -37,7 +37,7 @@ jobs:
         continue-on-error: true
       - name: Compress binaries
         run: |
-          zip -J rust-binary-${{ matrix.target }}.zip target/${{ matrix.target }}/release/*
+          zip rust-binary-${{ matrix.target }}.zip target/${{ matrix.target }}/release/*
   
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v3
