@@ -40,7 +40,6 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: mock-${{ matrix.target }}
-          path: mock-${{ matrix.target }}.txt
       - name: list-artifacts
         run: ls
       - name: Create GitHub Release
