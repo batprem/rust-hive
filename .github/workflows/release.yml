@@ -58,6 +58,7 @@ jobs:
       - name: list-artifacts
         run: ls binaries
       - name: Create GitHub Release
+        permissions: write-all
         uses: softprops/action-gh-release@v1
         with:
           files: |
